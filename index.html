@@ -150,6 +150,8 @@ body{font-family:var(--font);background:#eaf2e4;color:var(--text);min-height:100
 
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--text3);padding:0.5rem 0 2rem;align-items:center}
 .lead-drag-handle{color:var(--text3);cursor:grab;font-size:16px;padding:0 4px 0 0;flex-shrink:0}
+.lead-card *{pointer-events:none}
+.lead-card button,.lead-card a,.lead-card input,.lead-card textarea,.lead-card .lead-drag-handle{pointer-events:auto}
 .lead-card.dragging{opacity:0.4}
 .lead-card.drag-over-top{border-top:2px solid var(--green)}
 .lead-card.drag-over-bottom{border-bottom:2px solid var(--green)}
@@ -240,7 +242,7 @@ body{font-family:var(--font);background:#eaf2e4;color:var(--text);min-height:100
       <button class="action-btn" onclick="openModal('modal-lead')"><i class="ti ti-plus"></i> Add lead</button>
     </div>
     <div class="section-label">Leads <span style="font-size:11px;color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0">(drag to reorder)</span></div>
-    <div class="grid grid-wide" id="leads-grid"></div>
+    <div id="leads-grid" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
   </div>
 
   <!-- SOCIALS -->
