@@ -190,6 +190,9 @@ body{font-family:var(--font);background:#eaf2e4;color:var(--text);min-height:100
 .panel-refresh{font-size:11px;padding:3px 10px;border-radius:99px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;font-family:var(--font)}
 .panel-refresh:hover{background:var(--green-l);color:var(--green)}
 .panel-empty{font-size:12px;color:var(--text3);font-style:italic;padding:16px 4px;text-align:center}
+.panel-section-header{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);padding:10px 4px 4px;border-bottom:1px solid var(--border);margin-bottom:4px}
+.panel-section-header:first-child{padding-top:4px}
+.panel-section-empty{font-size:11px;color:var(--text3);font-style:italic;padding:4px 4px 6px}
 .leg-dot{width:6px;height:6px;border-radius:50%;display:inline-block}
 .leg-box{width:9px;height:9px;border-radius:2px;border:2px solid var(--green);display:inline-block}
 </style>
@@ -972,32 +975,45 @@ function togglePanel(){
 }
 
 function gatherAllTasks(){
-  const items = [];
-  // Clients
+  const groups = {
+    'Today's tasks': [],
+    'Socials': [],
+    'Medium term': [],
+    'Long term': [],
+    'Strategy': [],
+    'Personal': []
+  };
+  // Client daily tasks
   Object.keys(state.clients||{}).forEach(c => {
+    if(state.clients[c]?.dormant) return;
     (state.clients[c].tasks||[]).forEach(t => {
       if(!t.done && taskVisible(t, currentDay))
-        items.push({uid: 'c_'+t.id, text: t.text, source: c, section: 'Clients'});
+        groups['Today's tasks'].push({uid:'c_'+t.id, text:t.text, source:c});
     });
     (state.clients[c].mediumTasks||[]).forEach(t => {
-      if(!t.done) items.push({uid: 'cm_'+t.id, text: t.text, source: c, section: 'Medium term'});
+      if(!t.done) groups['Medium term'].push({uid:'cm_'+t.id, text:t.text, source:c});
     });
     (state.clients[c].longTasks||[]).forEach(t => {
-      if(!t.done) items.push({uid: 'cl_'+t.id, text: t.text, source: c, section: 'Long term'});
+      if(!t.done) groups['Long term'].push({uid:'cl_'+t.id, text:t.text, source:c});
     });
   });
   // Socials
   (state.socials||[]).forEach(t => {
     if(!t.done && taskVisible(t, socialsDay))
-      items.push({uid: 's_'+t.id, text: t.text, source: 'Socials', section: 'Socials'});
+      groups['Socials'].push({uid:'s_'+t.id, text:t.text, source:'Socials'});
   });
   // Strategy
   (state.strategy||[]).forEach(t => {
-    if(!t.done) items.push({uid: 'st_'+t.id, text: t.text, source: 'Strategy', section: 'Strategy'});
+    if(!t.done) groups['Strategy'].push({uid:'st_'+t.id, text:t.text, source:'Strategy'});
   });
   // Personal
   (state.personal||[]).forEach(t => {
-    if(!t.done) items.push({uid: 'p_'+t.id, text: t.text, source: 'Personal', section: 'Personal'});
+    if(!t.done) groups['Personal'].push({uid:'p_'+t.id, text:t.text, source:'Personal'});
+  });
+  // flatten with section info
+  const items = [];
+  Object.entries(groups).forEach(([section, tasks]) => {
+    tasks.forEach(t => items.push({...t, section}));
   });
   return items;
 }
@@ -1021,49 +1037,61 @@ function renderPanel(){
     el.innerHTML = '<div class="panel-empty">No uncompleted tasks — great work! 🌿</div>';
     return;
   }
+
+  // Group by section, preserving drag order within each group
+  const sections = ["Today's tasks","Socials","Medium term","Long term","Strategy","Personal"];
+  const grouped = {};
+  sections.forEach(s => grouped[s] = []);
   panelOrder.forEach((item, idx) => {
-    const div = document.createElement('div');
-    div.className = 'panel-item';
-    div.draggable = true;
-    div.dataset.idx = idx;
-    div.innerHTML = `<span class="drag-handle"><i class="ti ti-grip-vertical"></i></span>
-      <div style="flex:1;min-width:0">
-        <div class="panel-item-text">${item.text}</div>
-        <div class="panel-item-client">${item.source}${item.section!==item.source?' · '+item.section:''}</div>
-      </div>`;
-    div.addEventListener('dragstart', e => { dragSrcIdx = idx; div.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
-    div.addEventListener('dragend', () => { div.classList.remove('dragging'); document.querySelectorAll('.panel-item').forEach(d=>d.classList.remove('drag-over')); renderPanel(); });
-    div.addEventListener('dragover', e => {
-      e.preventDefault();
-      if(dragSrcIdx === null || dragSrcIdx === idx) return;
-      // Insert before or after based on mouse position
-      const rect = div.getBoundingClientRect();
-      const mid = rect.top + rect.height / 2;
-      div.classList.add('drag-over');
-      div.dataset.dropPos = e.clientY < mid ? 'before' : 'after';
-    });
-    div.addEventListener('dragleave', () => { div.classList.remove('drag-over'); delete div.dataset.dropPos; });
-    div.addEventListener('drop', e => {
-      e.preventDefault();
-      div.classList.remove('drag-over');
-      if(dragSrcIdx === null || dragSrcIdx === idx) return;
-      const rect = div.getBoundingClientRect();
-      const mid = rect.top + rect.height / 2;
-      const insertAfter = e.clientY >= mid;
-      const moved = panelOrder.splice(dragSrcIdx, 1)[0];
-      let targetIdx = panelOrder.indexOf(panelOrder.find((_, i) => {
-        const els = document.querySelectorAll('.panel-item');
-        return els[i] && parseInt(els[i].dataset.idx) === idx;
-      }));
-      // Simpler: recalculate target after splice
-      let insertAt = idx > dragSrcIdx ? idx - 1 : idx;
-      if(insertAfter) insertAt += 1;
-      panelOrder.splice(insertAt, 0, moved);
-      dragSrcIdx = null;
-      renderPanel();
-    });
-    el.appendChild(div);
+    if(grouped[item.section]) grouped[item.section].push({item, idx});
   });
+
+  let hasAny = false;
+  sections.forEach(section => {
+    const items = grouped[section];
+    if(!items.length) return;
+    hasAny = true;
+    const hdr = document.createElement('div');
+    hdr.className = 'panel-section-header';
+    hdr.textContent = section;
+    el.appendChild(hdr);
+
+    items.forEach(({item, idx}) => {
+      const div = document.createElement('div');
+      div.className = 'panel-item';
+      div.draggable = true;
+      div.dataset.idx = idx;
+      div.innerHTML = `<span class="drag-handle"><i class="ti ti-grip-vertical"></i></span>
+        <div style="flex:1;min-width:0">
+          <div class="panel-item-text">${item.text}</div>
+          <div class="panel-item-client">${item.source}</div>
+        </div>`;
+      div.addEventListener('dragstart', e => { dragSrcIdx = idx; div.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
+      div.addEventListener('dragend', () => { div.classList.remove('dragging'); document.querySelectorAll('.panel-item').forEach(d=>d.classList.remove('drag-over')); renderPanel(); });
+      div.addEventListener('dragover', e => {
+        e.preventDefault();
+        if(dragSrcIdx === null || dragSrcIdx === idx) return;
+        const rect = div.getBoundingClientRect();
+        div.classList.add('drag-over');
+      });
+      div.addEventListener('dragleave', () => div.classList.remove('drag-over'));
+      div.addEventListener('drop', e => {
+        e.preventDefault();
+        div.classList.remove('drag-over');
+        if(dragSrcIdx === null || dragSrcIdx === idx) return;
+        const insertAfter = e.clientY >= div.getBoundingClientRect().top + div.getBoundingClientRect().height/2;
+        const moved = panelOrder.splice(dragSrcIdx, 1)[0];
+        let insertAt = idx > dragSrcIdx ? idx - 1 : idx;
+        if(insertAfter) insertAt++;
+        panelOrder.splice(insertAt, 0, moved);
+        dragSrcIdx = null;
+        renderPanel();
+      });
+      el.appendChild(div);
+    });
+  });
+
+  if(!hasAny) el.innerHTML = '<div class="panel-empty">No uncompleted tasks — great work! 🌿</div>';
 }
 </script>
 </body>
