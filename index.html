@@ -149,6 +149,14 @@ body{font-family:var(--font);background:#eaf2e4;color:var(--text);min-height:100
 .modal-btns{display:flex;gap:8px;justify-content:flex-end}
 
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--text3);padding:0.5rem 0 2rem;align-items:center}
+.lead-drag-handle{color:var(--text3);cursor:grab;font-size:16px;padding:0 4px 0 0;flex-shrink:0}
+.lead-card.dragging{opacity:0.4}
+.lead-card.drag-over-top{border-top:2px solid var(--green)}
+.lead-card.drag-over-bottom{border-bottom:2px solid var(--green)}
+.move-to-client-btn{font-size:11px;padding:3px 9px;border-radius:99px;border:1px solid var(--green);background:var(--green-l);color:var(--green-d);cursor:pointer;font-family:var(--font);font-weight:500;white-space:nowrap}
+.move-to-client-btn:hover{background:var(--green);color:#fff}
+.lead-tasks{padding:5px 8px}
+.lead-add-area{padding:2px 8px 8px}
 
 /* master workflow panel */
 .panel-toggle{position:fixed;left:0;top:50%;transform:translateY(-50%);background:var(--green);color:#fff;border:none;cursor:pointer;font-family:var(--font);font-size:12px;font-weight:500;padding:10px 7px;border-radius:0 8px 8px 0;z-index:200;writing-mode:vertical-rl;text-orientation:mixed;letter-spacing:0.05em;box-shadow:2px 0 8px rgba(0,0,0,0.1);transition:left 0.3s}
@@ -231,7 +239,7 @@ body{font-family:var(--font);background:#eaf2e4;color:var(--text);min-height:100
     <div class="toolbar">
       <button class="action-btn" onclick="openModal('modal-lead')"><i class="ti ti-plus"></i> Add lead</button>
     </div>
-    <div class="section-label">Leads</div>
+    <div class="section-label">Leads <span style="font-size:11px;color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0">(drag to reorder)</span></div>
     <div class="grid grid-wide" id="leads-grid"></div>
   </div>
 
@@ -339,7 +347,7 @@ function defaultState(){
   clients["Jolly Sportsman"].tasks.push({id:nextId++,text:"Order reminders",done:false,type:"day-specific",days:[0,3]});
 
   const leads=["Planthood","Shuck! Eastbourne","Crate Brewery","Nourished","Beaulieu","Gail's Bakery","Dishy","Cook","FieldGoods","Caccia and Tails","Glyndebourne","Pennyhill Park"]
-    .map(name=>({id:nextId++,name,notes:''}));
+    .map(name=>({id:nextId++,name,notes:'',tasks:[],link:''}));
 
   const socials=[
     {id:nextId++,text:"Plan reel",done:false,type:"day-specific",days:[0]},
@@ -363,7 +371,7 @@ if(!state.personal)state.personal=[];
 if(!state.socials)state.socials=[];
 if(!state.weeklyPlan)state.weeklyPlan='';
 // ensure leads have notes
-if(state.leads)state.leads.forEach(l=>{if(!l.notes)l.notes='';if(!l.link)l.link='';});
+if(state.leads)state.leads.forEach(l=>{if(!l.notes)l.notes='';if(!l.link)l.link='';if(!l.tasks)l.tasks=[];});
 // ensure clients have medium/long
 if(state.clients)Object.keys(state.clients).forEach(c=>{if(!state.clients[c].medium)state.clients[c].medium='';if(!state.clients[c].long)state.clients[c].long='';if(!state.clients[c].mediumTasks)state.clients[c].mediumTasks=[];if(!state.clients[c].longTasks)state.clients[c].longTasks=[];if(!state.clients[c].link)state.clients[c].link='';});
 
@@ -553,23 +561,119 @@ function confirmAddClient(){
 }
 
 // --- LEADS ---
+let leadDragSrc = null;
+
 function renderLeads(){
-  const q='';
-  const leads=state.leads||[];
-  const grid=document.getElementById('leads-grid');grid.innerHTML='';
-  const filtered=q?leads.filter(l=>l.name.toLowerCase().includes(q)):leads;
-  filtered.forEach(l=>{
-    const div=document.createElement('div');div.className='lead-card';
-    div.innerHTML=`<div class="lead-header"><span class="lead-name">${l.name}</span>
-      <div style="display:flex;align-items:center;gap:8px">
-        ${l.link
-          ? `<a href="${l.link}" target="_blank" title="Open Sales Timeline" style="color:var(--green);font-size:15px;text-decoration:none;line-height:1"><i class="ti ti-file-text"></i></a>`
-          : `<button onclick="editLeadLink(${l.id})" title="Add Sales Timeline link" style="background:transparent;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0;line-height:1"><i class="ti ti-link"></i></button>`}
-        <button class="lead-del" onclick="delLead(${l.id})"><i class="ti ti-x"></i></button>
-      </div></div>
+  const leads = state.leads || [];
+  const grid = document.getElementById('leads-grid');
+  grid.innerHTML = '';
+  leads.forEach((l, idx) => {
+    const div = document.createElement('div');
+    div.className = 'lead-card';
+    div.draggable = true;
+    div.dataset.id = l.id;
+
+    // tasks HTML
+    const tasks = l.tasks || [];
+    const tasksHTML = tasks.length ? tasks.map(t =>
+      `<div class="task-row">
+        <button class="check-btn ${t.done?'checked':''}" onclick="toggleLeadTask(${l.id},${t.id})"></button>
+        <span class="task-label ${t.done?'done-text':''}">${t.text}</span>
+        <button class="del-btn" onclick="delLeadTask(${l.id},${t.id})"><i class="ti ti-x"></i></button>
+      </div>`).join('') : '<div class="no-tasks">No tasks yet</div>';
+
+    const isActive = activeLeadInput === l.id;
+    const addHTML = isActive
+      ? `<div class="add-open" style="padding:4px 8px 8px"><input id="lead-inp-${l.id}" placeholder="Task name..." onkeydown="handleLeadTaskKey(event,${l.id})"><div style="display:flex;gap:6px;margin-top:4px"><button class="btn-add" onclick="submitLeadTask(${l.id})">Add</button><button class="btn-cancel" onclick="closeLeadInput()">Cancel</button></div></div>`
+      : `<div class="lead-add-area"><button class="add-trigger" onclick="openLeadInput(${l.id})"><i class="ti ti-plus" style="font-size:14px"></i> add task</button></div>`;
+
+    const linkBtn = l.link
+      ? `<a href="${l.link}" target="_blank" title="Open Sales Timeline" style="color:var(--green);font-size:15px;text-decoration:none;line-height:1"><i class="ti ti-file-text"></i></a>`
+      : `<button onclick="editLeadLink(${l.id})" title="Add Sales Timeline link" style="background:transparent;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0;line-height:1"><i class="ti ti-link"></i></button>`;
+
+    div.innerHTML = `
+      <div class="lead-header">
+        <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0">
+          <span class="lead-drag-handle"><i class="ti ti-grip-vertical"></i></span>
+          <span class="lead-name">${l.name}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;flex-shrink:0">
+          <button class="move-to-client-btn" onclick="moveLeadToClient(${l.id})">→ Client</button>
+          ${linkBtn}
+          <button class="lead-del" onclick="delLead(${l.id})"><i class="ti ti-x"></i></button>
+        </div>
+      </div>
+      <div class="lead-tasks">${tasksHTML}</div>
+      ${addHTML}
       <div class="lead-notes"><textarea placeholder="Notes on ${l.name}..." onchange="saveLeadNote(${l.id},this.value)">${l.notes||''}</textarea></div>`;
+
+    // drag events
+    div.addEventListener('dragstart', e => {
+      leadDragSrc = idx;
+      div.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    div.addEventListener('dragend', () => {
+      div.classList.remove('dragging');
+      document.querySelectorAll('.lead-card').forEach(d => d.classList.remove('drag-over-top','drag-over-bottom'));
+    });
+    div.addEventListener('dragover', e => {
+      e.preventDefault();
+      document.querySelectorAll('.lead-card').forEach(d => d.classList.remove('drag-over-top','drag-over-bottom'));
+      const rect = div.getBoundingClientRect();
+      div.classList.add(e.clientY < rect.top + rect.height/2 ? 'drag-over-top' : 'drag-over-bottom');
+    });
+    div.addEventListener('dragleave', () => div.classList.remove('drag-over-top','drag-over-bottom'));
+    div.addEventListener('drop', e => {
+      e.preventDefault();
+      div.classList.remove('drag-over-top','drag-over-bottom');
+      if(leadDragSrc === null || leadDragSrc === idx) return;
+      const rect = div.getBoundingClientRect();
+      const insertAfter = e.clientY >= rect.top + rect.height/2;
+      const moved = state.leads.splice(leadDragSrc, 1)[0];
+      let insertAt = idx > leadDragSrc ? idx - 1 : idx;
+      if(insertAfter) insertAt++;
+      state.leads.splice(insertAt, 0, moved);
+      leadDragSrc = null;
+      save();
+      renderLeads();
+    });
+
     grid.appendChild(div);
+    if(isActive) setTimeout(() => { const inp = document.getElementById('lead-inp-'+l.id); if(inp) inp.focus(); }, 10);
   });
+}
+
+let activeLeadInput = null;
+function openLeadInput(id){ activeLeadInput = id; renderLeads(); }
+function closeLeadInput(){ activeLeadInput = null; renderLeads(); }
+function submitLeadTask(id){
+  const inp = document.getElementById('lead-inp-'+id); if(!inp) return;
+  const text = inp.value.trim(); if(!text) return;
+  const l = (state.leads||[]).find(l=>l.id===id); if(!l) return;
+  if(!l.tasks) l.tasks = [];
+  l.tasks.push({id: nextId++, text, done: false});
+  inp.value = ''; save(); closeLeadInput();
+}
+function handleLeadTaskKey(e, id){
+  if(e.key==='Enter') submitLeadTask(id);
+  if(e.key==='Escape') closeLeadInput();
+}
+function toggleLeadTask(lid, tid){
+  const l=(state.leads||[]).find(l=>l.id===lid); if(!l) return;
+  const t=(l.tasks||[]).find(t=>t.id===tid); if(t){t.done=!t.done; save(); renderLeads();}
+}
+function delLeadTask(lid, tid){
+  const l=(state.leads||[]).find(l=>l.id===lid); if(!l) return;
+  l.tasks=(l.tasks||[]).filter(t=>t.id!==tid); save(); renderLeads();
+}
+function moveLeadToClient(id){
+  const l=(state.leads||[]).find(l=>l.id===id); if(!l) return;
+  if(state.clients[l.name]){ showToast(l.name+' is already a client'); return; }
+  state.clients[l.name] = {tasks:[], priority:false, medium:'', long:'', mediumTasks:[], longTasks:[], link: l.link||''};
+  state.leads = state.leads.filter(l=>l.id!==id);
+  save(); renderLeads();
+  showToast(l.name+' moved to clients ✓');
 }
 function editLeadLink(id){
   const l=(state.leads||[]).find(l=>l.id===id);if(!l)return;
@@ -583,7 +687,7 @@ function delLead(id){state.leads=(state.leads||[]).filter(l=>l.id!==id);save();r
 function confirmAddLead(){
   const name=document.getElementById('modal-lead-name').value.trim();if(!name)return;
   if(!state.leads)state.leads=[];
-  state.leads.push({id:nextId++,name,notes:''});
+  state.leads.push({id:nextId++,name,notes:'',tasks:[],link:''});
   document.getElementById('modal-lead-name').value='';closeModal('modal-lead');save();renderLeads();
 }
 
@@ -732,7 +836,7 @@ function importData(e){
       if(!state.personal)state.personal=[];
       if(!state.socials)state.socials=[];
       if(!state.weeklyPlan)state.weeklyPlan='';
-      if(state.leads)state.leads.forEach(l=>{if(!l.notes)l.notes='';if(!l.link)l.link='';});
+      if(state.leads)state.leads.forEach(l=>{if(!l.notes)l.notes='';if(!l.link)l.link='';if(!l.tasks)l.tasks=[];});
       buildDayTabs();
       renderClients();
       updateBadges();
