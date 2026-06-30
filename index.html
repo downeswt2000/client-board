@@ -416,7 +416,7 @@ if(!state.weeklyPlan)state.weeklyPlan='';
 // ensure leads have notes
 if(state.leads)state.leads.forEach(l=>{if(!l.notes)l.notes='';if(!l.link)l.link='';if(!l.tasks)l.tasks=[];});
 // ensure clients have medium/long
-if(state.clients)Object.keys(state.clients).forEach(c=>{if(!state.clients[c].medium)state.clients[c].medium='';if(!state.clients[c].long)state.clients[c].long='';if(!state.clients[c].mediumTasks)state.clients[c].mediumTasks=[];if(!state.clients[c].longTasks)state.clients[c].longTasks=[];if(!state.clients[c].link)state.clients[c].link='';if(state.clients[c].dormant===undefined)state.clients[c].dormant=false;if(!state.clients[c].deliveryDays)state.clients[c].deliveryDays=[];});
+if(state.clients)Object.keys(state.clients).forEach(c=>{if(!state.clients[c].link)state.clients[c].link='';if(state.clients[c].dormant===undefined)state.clients[c].dormant=false;if(!state.clients[c].deliveryDays)state.clients[c].deliveryDays=[];if(!state.clients[c].goalTasks){state.clients[c].goalTasks=[...(state.clients[c].mediumTasks||[]),...(state.clients[c].longTasks||[])];}delete state.clients[c].medium;delete state.clients[c].long;delete state.clients[c].mediumTasks;delete state.clients[c].longTasks;});
 
 // --- BADGES ---
 function updateBadges(){
@@ -489,8 +489,7 @@ function makeClientCard(c,pinned){
   if(p.total>0){pillCls=p.done===p.total?'pill-done':'pill-partial';pillTxt=p.done===p.total?'Done':p.done+'/'+p.total;}
   const view=getCardView(c);
   const visible=(state.clients[c]?.tasks||[]).filter(t=>taskVisible(t,currentDay));
-  const hasMedium=(state.clients[c]?.mediumTasks||[]).length>0;
-  const hasLong=(state.clients[c]?.longTasks||[]).length>0;
+  const hasGoals=(state.clients[c]?.goalTasks||[]).length>0;
   const deliveryDays=state.clients[c]?.deliveryDays||[];
   const hasDelivery=deliveryDays.length>0;
 
@@ -511,18 +510,12 @@ function makeClientCard(c,pinned){
       addHTML=`<div class="add-open"><input id="inp-${sk(c)}" placeholder="Task name..." onkeydown="handleClientKey(event,'${c}')"><div class="recur-row"><button class="rtoggle ${rMode==='one-off'?'on':''}" onclick="setRM('${c}','one-off')">one-off</button><button class="rtoggle ${rMode==='daily'?'on':''}" onclick="setRM('${c}','daily')">daily</button><button class="rtoggle ${rMode==='day-specific'?'on':''}" onclick="setRM('${c}','day-specific')">specific days</button></div>${rMode==='day-specific'?`<div class="day-chips-row">${dayChips}</div>`:''}<div style="display:flex;gap:6px;margin-top:2px"><button class="btn-add" onclick="submitClientTask('${c}')">Add</button><button class="btn-cancel" onclick="closeInput()">Cancel</button></div></div>`;
     }else{addHTML=`<button class="add-trigger" onclick="openInput('${c}')"><i class="ti ti-plus" style="font-size:14px"></i> add task</button>`;}
     bodyHTML=`<div class="tasks">${tasksHTML}</div><div class="add-area">${addHTML}</div>`;
-  } else if(view==='medium'){
-    const mTasks=(state.clients[c]?.mediumTasks||[]);
-    const mTasksHTML=mTasks.length?mTasks.map(t=>`<div class="task-row"><button class="check-btn ${t.done?'checked':''}" onclick="toggleTermTask('${c}','medium',${t.id})"></button><span class="task-label ${t.done?'done-text':''}">${t.text}</span><button class="del-btn" onclick="delTermTask('${c}','medium',${t.id})"><i class="ti ti-x"></i></button></div>`).join(''):'';
-    const mActive=activeTermInput&&activeTermInput.c===c&&activeTermInput.view==='medium';
-    const mAddHTML=mActive?`<div class="add-open" style="padding:4px 7px 7px"><input id="inp-term-medium-${sk(c)}" placeholder="Task name..." onkeydown="if(event.key==='Enter')submitTermTask('${c}','medium');if(event.key==='Escape')closeTermInput()"><div style="display:flex;gap:6px;margin-top:4px"><button class="btn-add" onclick="submitTermTask('${c}','medium')">Add</button><button class="btn-cancel" onclick="closeTermInput()">Cancel</button></div></div>`:`<div class="add-area"><button class="add-trigger" onclick="openTermInput('${c}','medium')"><i class="ti ti-plus" style="font-size:14px"></i> add task</button></div>`;
-    bodyHTML=`<div class="tasks">${mTasksHTML||'<div class="no-tasks">No medium term tasks</div>'}</div>${mAddHTML}`;
-  } else if(view==='long'){
-    const lTasks=(state.clients[c]?.longTasks||[]);
-    const lTasksHTML=lTasks.length?lTasks.map(t=>`<div class="task-row"><button class="check-btn ${t.done?'checked':''}" onclick="toggleTermTask('${c}','long',${t.id})"></button><span class="task-label ${t.done?'done-text':''}">${t.text}</span><button class="del-btn" onclick="delTermTask('${c}','long',${t.id})"><i class="ti ti-x"></i></button></div>`).join(''):'';
-    const lActive=activeTermInput&&activeTermInput.c===c&&activeTermInput.view==='long';
-    const lAddHTML=lActive?`<div class="add-open" style="padding:4px 7px 7px"><input id="inp-term-long-${sk(c)}" placeholder="Task name..." onkeydown="if(event.key==='Enter')submitTermTask('${c}','long');if(event.key==='Escape')closeTermInput()"><div style="display:flex;gap:6px;margin-top:4px"><button class="btn-add" onclick="submitTermTask('${c}','long')">Add</button><button class="btn-cancel" onclick="closeTermInput()">Cancel</button></div></div>`:`<div class="add-area"><button class="add-trigger" onclick="openTermInput('${c}','long')"><i class="ti ti-plus" style="font-size:14px"></i> add task</button></div>`;
-    bodyHTML=`<div class="tasks">${lTasksHTML||'<div class="no-tasks">No long term tasks</div>'}</div>${lAddHTML}`;
+  } else if(view==='goals'){
+    const gTasks=(state.clients[c]?.goalTasks||[]);
+    const gTasksHTML=gTasks.length?gTasks.map(t=>`<div class="task-row"><button class="check-btn ${t.done?'checked':''}" onclick="toggleTermTask('${c}','goals',${t.id})"></button><span class="task-label ${t.done?'done-text':''}">${t.text}</span><button class="del-btn" onclick="delTermTask('${c}','goals',${t.id})"><i class="ti ti-x"></i></button></div>`).join(''):'';
+    const gActive=activeTermInput&&activeTermInput.c===c&&activeTermInput.view==='goals';
+    const gAddHTML=gActive?`<div class="add-open" style="padding:4px 7px 7px"><input id="inp-term-goals-${sk(c)}" placeholder="Task name..." onkeydown="if(event.key==='Enter')submitTermTask('${c}','goals');if(event.key==='Escape')closeTermInput()"><div style="display:flex;gap:6px;margin-top:4px"><button class="btn-add" onclick="submitTermTask('${c}','goals')">Add</button><button class="btn-cancel" onclick="closeTermInput()">Cancel</button></div></div>`:`<div class="add-area"><button class="add-trigger" onclick="openTermInput('${c}','goals')"><i class="ti ti-plus" style="font-size:14px"></i> add task</button></div>`;
+    bodyHTML=`<div class="tasks">${gTasksHTML||'<div class="no-tasks">No goals yet</div>'}</div>${gAddHTML}`;
   } else if(view==='delivery'){
     const delDays = state.clients[c]?.deliveryDays || [];
     const dayChipsHTML = DAYS.slice(0,5).map((d,i)=>
@@ -555,8 +548,7 @@ function makeClientCard(c,pinned){
     </div>
     <div class="card-view-tabs">
       <button class="cvt ${view==='tasks'?'active':''}" onclick="setCardView('${c}','tasks')">Tasks</button>
-      <button class="cvt ${view==='medium'?'active':''}" onclick="setCardView('${c}','medium')">Medium term${hasMedium?'<span class="cvt-dot"></span>':''}</button>
-      <button class="cvt ${view==='long'?'active':''}" onclick="setCardView('${c}','long')">Long term${hasLong?'<span class="cvt-dot"></span>':''}</button>
+      <button class="cvt ${view==='goals'?'active':''}" onclick="setCardView('${c}','goals')">Goals${hasGoals?'<span class="cvt-dot"></span>':''}</button>
       <button class="cvt ${view==='delivery'?'active':''}" onclick="setCardView('${c}','delivery')">Delivery days${hasDelivery?'<span class="cvt-dot"></span>':''}</button>
     </div>
     ${bodyHTML}`;
@@ -752,7 +744,7 @@ function toggleClientPriority(c){
 function confirmAddClient(){
   const name=document.getElementById('modal-client-name').value.trim();if(!name)return;
   const isPriority=document.getElementById('modal-client-priority').value==='priority';
-  state.clients[name]={tasks:[],priority:isPriority,medium:'',long:'',mediumTasks:[],longTasks:[],link:'',dormant:false,deliveryDays:[]};if(!state.clientOrder)state.clientOrder=[];state.clientOrder.push(name);
+  state.clients[name]={tasks:[],priority:isPriority,goalTasks:[],link:'',dormant:false,deliveryDays:[]};if(!state.clientOrder)state.clientOrder=[];state.clientOrder.push(name);
   document.getElementById('modal-client-name').value='';
   closeModal('modal-client');save();renderClients();
 }
@@ -867,7 +859,9 @@ function delLeadTask(lid, tid){
 function moveLeadToClient(id){
   const l=(state.leads||[]).find(l=>l.id===id); if(!l) return;
   if(state.clients[l.name]){ showToast(l.name+' is already a client'); return; }
-  state.clients[l.name] = {tasks:[], priority:false, medium:'', long:'', mediumTasks:[], longTasks:[], link: l.link||''};
+  state.clients[l.name] = {tasks:[], priority:false, goalTasks:[], link: l.link||'', dormant:false, deliveryDays:[]};
+  if(!state.clientOrder)state.clientOrder=[];
+  state.clientOrder.push(l.name);
   state.leads = state.leads.filter(l=>l.id!==id);
   save(); renderLeads();
   showToast(l.name+' moved to clients ✓');
@@ -1044,13 +1038,11 @@ function importData(e){
       Object.keys(state.clients).forEach(c=>{
         if(!state.clients[c].tasks)state.clients[c].tasks=[];
         if(state.clients[c].priority===undefined)state.clients[c].priority=false;
-        if(!state.clients[c].medium)state.clients[c].medium='';
-        if(!state.clients[c].long)state.clients[c].long='';
-        if(!state.clients[c].mediumTasks)state.clients[c].mediumTasks=[];
-        if(!state.clients[c].longTasks)state.clients[c].longTasks=[];
         if(!state.clients[c].link)state.clients[c].link='';
         if(state.clients[c].dormant===undefined)state.clients[c].dormant=false;
         if(!state.clients[c].deliveryDays)state.clients[c].deliveryDays=[];
+        if(!state.clients[c].goalTasks){state.clients[c].goalTasks=[...(state.clients[c].mediumTasks||[]),...(state.clients[c].longTasks||[])];}
+        delete state.clients[c].medium;delete state.clients[c].long;delete state.clients[c].mediumTasks;delete state.clients[c].longTasks;
       });
       if(!state.clientOrder) state.clientOrder = [];
       Object.keys(state.clients).forEach(c=>{ if(!state.clientOrder.includes(c)) state.clientOrder.push(c); });
@@ -1092,8 +1084,7 @@ function gatherAllTasks(){
   const groups = {
     'Todays tasks': [],
     'Socials': [],
-    'Medium term': [],
-    'Long term': [],
+    'Goals': [],
     'Strategy': [],
     'Personal': []
   };
@@ -1104,11 +1095,8 @@ function gatherAllTasks(){
       if(!t.done && taskVisible(t, currentDay))
         groups['Todays tasks'].push({uid:'c_'+t.id, text:t.text, source:c});
     });
-    (state.clients[c].mediumTasks||[]).forEach(t => {
-      if(!t.done) groups['Medium term'].push({uid:'cm_'+t.id, text:t.text, source:c});
-    });
-    (state.clients[c].longTasks||[]).forEach(t => {
-      if(!t.done) groups['Long term'].push({uid:'cl_'+t.id, text:t.text, source:c});
+    (state.clients[c].goalTasks||[]).forEach(t => {
+      if(!t.done) groups['Goals'].push({uid:'cg_'+t.id, text:t.text, source:c});
     });
   });
   // Socials
@@ -1153,7 +1141,7 @@ function renderPanel(){
   }
 
   // Group by section, preserving drag order within each group
-  const sections = ["Todays tasks","Socials","Medium term","Long term","Strategy","Personal"];
+  const sections = ["Todays tasks","Socials","Goals","Strategy","Personal"];
   const grouped = {};
   sections.forEach(s => grouped[s] = []);
   panelOrder.forEach((item, idx) => {
