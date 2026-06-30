@@ -261,7 +261,7 @@ body{font-family:var(--font);background:#eaf2e4;color:var(--text);min-height:100
       <button class="action-btn" onclick="openModal('modal-lead')"><i class="ti ti-plus"></i> Add lead</button>
     </div>
     <div class="section-label">Leads <span style="font-size:11px;color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0">(drag to reorder)</span></div>
-    <div id="leads-grid" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
+    <div id="leads-grid" class="grid grid-wide"></div>
   </div>
 
   <!-- SOCIALS -->
@@ -337,6 +337,18 @@ body{font-family:var(--font);background:#eaf2e4;color:var(--text);min-height:100
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('modal-lead')">Cancel</button>
       <button class="btn-add" onclick="confirmAddLead()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT REMINDER MODAL -->
+<div class="modal-bg" id="modal-export-reminder">
+  <div class="modal">
+    <h3>🌿 Quick reminder</h3>
+    <p style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:14px">Don't forget to back up your data today — click <strong>Export</strong> on the Clients tab to save a copy to your Downloads folder.</p>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="dismissExportReminder()">Remind me later</button>
+      <button class="btn-add" onclick="exportData();dismissExportReminder();">Export now</button>
     </div>
   </div>
 </div>
@@ -509,7 +521,7 @@ function makeClientCard(c,pinned){
   card.dataset.client=c;
   card.innerHTML=`
     <div class="card-header">
-      <span class="client-name" style="cursor:grab"><i class="ti ti-grip-vertical" style="font-size:13px;color:var(--text3);margin-right:2px"></i>${pinned?'<i class="ti ti-pin pin-icon"></i>':''} ${c}</span>
+      <span class="client-name" style="cursor:grab"><i class="ti ti-grip-vertical" style="font-size:13px;color:var(--text3);margin-right:2px"></i><button onclick="event.stopPropagation();toggleClientPriority('${c}')" title="${pinned?'Remove from priority':'Mark as priority'}" style="background:transparent;border:none;cursor:pointer;padding:0;line-height:1;vertical-align:middle"><i class="ti ti-pin${pinned?'':'-off'} pin-icon" style="${pinned?'':'color:var(--text3);opacity:0.5'}"></i></button> ${c}</span>
       <div style="display:flex;align-items:center;gap:7px;flex-shrink:0">
         ${cLink
           ? `<a href="${cLink}" target="_blank" title="Open Sales Timeline" style="color:var(--green);font-size:15px;text-decoration:none;line-height:1"><i class="ti ti-file-text"></i></a>`
@@ -655,8 +667,15 @@ function submitClientTask(c){
 }
 function handleClientKey(e,c){if(e.key==='Enter')submitClientTask(c);if(e.key==='Escape')closeInput();}
 function resetDay(){
-  Object.keys(state.clients).forEach(c=>{state.clients[c].tasks=state.clients[c].tasks.filter(t=>t.type==='daily'||t.type==='day-specific').map(t=>({...t,done:false}));});
-  state.socials=state.socials.filter(t=>t.type==='daily'||t.type==='day-specific').map(t=>({...t,done:false}));
+  // Recurring tasks reset to undone. One-off tasks: keep if uncompleted, remove if completed.
+  Object.keys(state.clients).forEach(c=>{
+    state.clients[c].tasks=state.clients[c].tasks
+      .filter(t=>t.type==='daily'||t.type==='day-specific'||!t.done)
+      .map(t=>(t.type==='daily'||t.type==='day-specific')?{...t,done:false}:t);
+  });
+  state.socials=state.socials
+    .filter(t=>t.type==='daily'||t.type==='day-specific'||!t.done)
+    .map(t=>(t.type==='daily'||t.type==='day-specific')?{...t,done:false}:t);
   save();activeInput=null;renderClients();
 }
 function openModal(id){document.getElementById(id).classList.add('open');setTimeout(()=>document.querySelector('#'+id+' input').focus(),50);}
@@ -666,6 +685,12 @@ function removeClient(c){
   delete state.clients[c];
   state.clientOrder=(state.clientOrder||[]).filter(x=>x!==c);
   save();renderClients();showToast(c+' removed');
+}
+function toggleClientPriority(c){
+  if(!state.clients[c])return;
+  state.clients[c].priority=!state.clients[c].priority;
+  save();renderClients();
+  showToast(c+(state.clients[c].priority?' marked as priority ✓':' removed from priority'));
 }
 function confirmAddClient(){
   const name=document.getElementById('modal-client-name').value.trim();if(!name)return;
@@ -839,7 +864,12 @@ function renderSocials(){
 }
 function toggleSocials(id){const t=(state.socials||[]).find(t=>t.id===id);if(t){t.done=!t.done;save();renderSocials();}}
 function delSocials(id){state.socials=(state.socials||[]).filter(t=>t.id!==id);save();renderSocials();}
-function resetSocials(){state.socials=state.socials.filter(t=>t.type==='daily'||t.type==='day-specific').map(t=>({...t,done:false}));save();renderSocials();}
+function resetSocials(){
+  state.socials=state.socials
+    .filter(t=>t.type==='daily'||t.type==='day-specific'||!t.done)
+    .map(t=>(t.type==='daily'||t.type==='day-specific')?{...t,done:false}:t);
+  save();renderSocials();
+}
 
 // --- STRATEGY ---
 function renderStrategy(){
@@ -910,6 +940,20 @@ document.getElementById('date-str').textContent=now.toLocaleDateString('en-GB',{
 buildDayTabs();
 renderClients();
 updateBadges();
+
+// --- DAILY EXPORT REMINDER ---
+function checkExportReminder(){
+  const today = new Date().toDateString();
+  const lastShown = localStorage.getItem('export_reminder_last_shown');
+  if(lastShown !== today){
+    document.getElementById('modal-export-reminder').classList.add('open');
+  }
+}
+function dismissExportReminder(){
+  localStorage.setItem('export_reminder_last_shown', new Date().toDateString());
+  document.getElementById('modal-export-reminder').classList.remove('open');
+}
+setTimeout(checkExportReminder, 800);
 
 // --- EXPORT / IMPORT ---
 function showToast(msg){
