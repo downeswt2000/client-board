@@ -611,7 +611,40 @@ function toggleDeliveryDay(c,i){
   const arr=state.clients[c].deliveryDays;
   const idx=arr.indexOf(i);
   if(idx>-1)arr.splice(idx,1);else arr.push(i);
+  syncOrderReminders(c);
   save();renderClients();
+}
+
+// Maps each delivery day to its order-reminder day (2 days before, wrapping Mon-Sun)
+const DELIVERY_TO_REMINDER = { 0:3, 1:6, 2:0, 3:1, 4:2 }; // Mon->Thu, Tue->Sun, Wed->Mon, Thu->Tue, Fri->Wed
+
+function syncOrderReminders(c){
+  if(!state.clients[c])return;
+  const deliveryDays = state.clients[c].deliveryDays || [];
+  // Work out the full set of reminder days needed based on current delivery days
+  const neededReminderDays = [...new Set(deliveryDays.map(d => DELIVERY_TO_REMINDER[d]).filter(d => d !== undefined))];
+
+  const tasks = state.clients[c].tasks || [];
+  const existingReminder = tasks.find(t => t.text === 'Order reminders' && t.type === 'day-specific');
+
+  if(neededReminderDays.length === 0){
+    // No delivery days needing reminders — remove the auto reminder task if present
+    if(existingReminder) state.clients[c].tasks = tasks.filter(t => t !== existingReminder);
+    return;
+  }
+
+  if(existingReminder){
+    // Update the days on the existing task rather than duplicating
+    existingReminder.days = neededReminderDays;
+  } else {
+    state.clients[c].tasks.push({
+      id: nextId++,
+      text: 'Order reminders',
+      done: false,
+      type: 'day-specific',
+      days: neededReminderDays
+    });
+  }
 }
 function saveTermNote(c,type,val){if(state.clients[c])state.clients[c][type]=val;save();}
 
@@ -988,6 +1021,10 @@ document.querySelectorAll('.modal-bg').forEach(el=>el.addEventListener('click',e
 const now=new Date();
 document.getElementById('date-str').textContent=now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 
+// sync order reminders for any clients with existing delivery days but no reminder task yet
+Object.keys(state.clients||{}).forEach(c => syncOrderReminders(c));
+save();
+
 buildDayTabs();
 renderClients();
 updateBadges();
@@ -1053,6 +1090,7 @@ function importData(e){
       if(!state.weeklyPlan)state.weeklyPlan='';
       if(!state.leads)state.leads=[];
       state.leads.forEach(l=>{if(!l.notes)l.notes='';if(!l.link)l.link='';if(!l.tasks)l.tasks=[];});
+      Object.keys(state.clients).forEach(c => syncOrderReminders(c));
       save();
       buildDayTabs();
       renderClients();
