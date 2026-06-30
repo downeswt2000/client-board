@@ -988,7 +988,7 @@ function togglePanel(){
 
 function gatherAllTasks(){
   const groups = {
-    'Today's tasks': [],
+    'Todays tasks': [],
     'Socials': [],
     'Medium term': [],
     'Long term': [],
@@ -1000,7 +1000,7 @@ function gatherAllTasks(){
     if(state.clients[c]?.dormant) return;
     (state.clients[c].tasks||[]).forEach(t => {
       if(!t.done && taskVisible(t, currentDay))
-        groups['Today's tasks'].push({uid:'c_'+t.id, text:t.text, source:c});
+        groups['Todays tasks'].push({uid:'c_'+t.id, text:t.text, source:c});
     });
     (state.clients[c].mediumTasks||[]).forEach(t => {
       if(!t.done) groups['Medium term'].push({uid:'cm_'+t.id, text:t.text, source:c});
@@ -1051,7 +1051,7 @@ function renderPanel(){
   }
 
   // Group by section, preserving drag order within each group
-  const sections = ["Today's tasks","Socials","Medium term","Long term","Strategy","Personal"];
+  const sections = ["Todays tasks","Socials","Medium term","Long term","Strategy","Personal"];
   const grouped = {};
   sections.forEach(s => grouped[s] = []);
   panelOrder.forEach((item, idx) => {
