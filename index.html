@@ -83,6 +83,16 @@ body{font-family:var(--font);background:#eaf2e4;color:var(--text);min-height:100
 .cvt{font-size:11px;padding:3px 8px;border:none;background:transparent;cursor:pointer;color:var(--text3);font-family:var(--font);border-bottom:2px solid transparent;margin-bottom:-1px}
 .cvt.active{color:var(--green);border-bottom-color:var(--green);font-weight:500}
 .cvt-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--green);margin-left:4px;vertical-align:middle;margin-bottom:1px}
+.delivery-badges{display:inline-flex;gap:3px;margin-left:5px;vertical-align:middle}
+.delivery-badge{font-size:9px;font-weight:600;width:15px;height:15px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--green-l);color:var(--green-d)}
+.delivery-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:14px 12px}
+.delivery-toggle{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;border-radius:8px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-family:var(--font)}
+.delivery-toggle.on{background:var(--green-l);border-color:var(--green)}
+.delivery-lbl{font-size:11px;color:var(--text2)}
+.delivery-toggle.on .delivery-lbl{color:var(--green-d);font-weight:500}
+.delivery-dot{width:8px;height:8px;border-radius:50%;background:var(--border2)}
+.delivery-toggle.on .delivery-dot{background:var(--green)}
+.delivery-summary{padding:0 12px 12px;font-size:12px;color:var(--text2)}
 
 /* tasks */
 .tasks{padding:5px 7px}
@@ -406,7 +416,7 @@ if(!state.weeklyPlan)state.weeklyPlan='';
 // ensure leads have notes
 if(state.leads)state.leads.forEach(l=>{if(!l.notes)l.notes='';if(!l.link)l.link='';if(!l.tasks)l.tasks=[];});
 // ensure clients have medium/long
-if(state.clients)Object.keys(state.clients).forEach(c=>{if(!state.clients[c].medium)state.clients[c].medium='';if(!state.clients[c].long)state.clients[c].long='';if(!state.clients[c].mediumTasks)state.clients[c].mediumTasks=[];if(!state.clients[c].longTasks)state.clients[c].longTasks=[];if(!state.clients[c].link)state.clients[c].link='';if(state.clients[c].dormant===undefined)state.clients[c].dormant=false;});
+if(state.clients)Object.keys(state.clients).forEach(c=>{if(!state.clients[c].medium)state.clients[c].medium='';if(!state.clients[c].long)state.clients[c].long='';if(!state.clients[c].mediumTasks)state.clients[c].mediumTasks=[];if(!state.clients[c].longTasks)state.clients[c].longTasks=[];if(!state.clients[c].link)state.clients[c].link='';if(state.clients[c].dormant===undefined)state.clients[c].dormant=false;if(!state.clients[c].deliveryDays)state.clients[c].deliveryDays=[];});
 
 // --- BADGES ---
 function updateBadges(){
@@ -481,6 +491,8 @@ function makeClientCard(c,pinned){
   const visible=(state.clients[c]?.tasks||[]).filter(t=>taskVisible(t,currentDay));
   const hasMedium=(state.clients[c]?.mediumTasks||[]).length>0;
   const hasLong=(state.clients[c]?.longTasks||[]).length>0;
+  const deliveryDays=state.clients[c]?.deliveryDays||[];
+  const hasDelivery=deliveryDays.length>0;
 
   let bodyHTML='';
   if(view==='tasks'){
@@ -505,12 +517,23 @@ function makeClientCard(c,pinned){
     const mActive=activeTermInput&&activeTermInput.c===c&&activeTermInput.view==='medium';
     const mAddHTML=mActive?`<div class="add-open" style="padding:4px 7px 7px"><input id="inp-term-medium-${sk(c)}" placeholder="Task name..." onkeydown="if(event.key==='Enter')submitTermTask('${c}','medium');if(event.key==='Escape')closeTermInput()"><div style="display:flex;gap:6px;margin-top:4px"><button class="btn-add" onclick="submitTermTask('${c}','medium')">Add</button><button class="btn-cancel" onclick="closeTermInput()">Cancel</button></div></div>`:`<div class="add-area"><button class="add-trigger" onclick="openTermInput('${c}','medium')"><i class="ti ti-plus" style="font-size:14px"></i> add task</button></div>`;
     bodyHTML=`<div class="tasks">${mTasksHTML||'<div class="no-tasks">No medium term tasks</div>'}</div>${mAddHTML}`;
-  } else {
+  } else if(view==='long'){
     const lTasks=(state.clients[c]?.longTasks||[]);
     const lTasksHTML=lTasks.length?lTasks.map(t=>`<div class="task-row"><button class="check-btn ${t.done?'checked':''}" onclick="toggleTermTask('${c}','long',${t.id})"></button><span class="task-label ${t.done?'done-text':''}">${t.text}</span><button class="del-btn" onclick="delTermTask('${c}','long',${t.id})"><i class="ti ti-x"></i></button></div>`).join(''):'';
     const lActive=activeTermInput&&activeTermInput.c===c&&activeTermInput.view==='long';
     const lAddHTML=lActive?`<div class="add-open" style="padding:4px 7px 7px"><input id="inp-term-long-${sk(c)}" placeholder="Task name..." onkeydown="if(event.key==='Enter')submitTermTask('${c}','long');if(event.key==='Escape')closeTermInput()"><div style="display:flex;gap:6px;margin-top:4px"><button class="btn-add" onclick="submitTermTask('${c}','long')">Add</button><button class="btn-cancel" onclick="closeTermInput()">Cancel</button></div></div>`:`<div class="add-area"><button class="add-trigger" onclick="openTermInput('${c}','long')"><i class="ti ti-plus" style="font-size:14px"></i> add task</button></div>`;
     bodyHTML=`<div class="tasks">${lTasksHTML||'<div class="no-tasks">No long term tasks</div>'}</div>${lAddHTML}`;
+  } else if(view==='delivery'){
+    const delDays = state.clients[c]?.deliveryDays || [];
+    const dayChipsHTML = DAYS.slice(0,5).map((d,i)=>
+      `<button class="delivery-toggle ${delDays.includes(i)?'on':''}" onclick="toggleDeliveryDay('${c}',${i})">
+        <span class="delivery-dot"></span><span class="delivery-lbl">${d}</span>
+      </button>`
+    ).join('');
+    const summary = delDays.length
+      ? 'Deliveries: ' + delDays.slice().sort((a,b)=>a-b).map(i=>DAYS[i]).join(', ')
+      : 'No delivery days set';
+    bodyHTML = `<div class="delivery-grid">${dayChipsHTML}</div><div class="delivery-summary">${summary}</div>`;
   }
 
   const card=document.createElement('div');
@@ -521,7 +544,7 @@ function makeClientCard(c,pinned){
   card.dataset.client=c;
   card.innerHTML=`
     <div class="card-header">
-      <span class="client-name" style="cursor:grab"><i class="ti ti-grip-vertical" style="font-size:13px;color:var(--text3);margin-right:2px"></i><button onclick="event.stopPropagation();toggleClientPriority('${c}')" title="${pinned?'Remove from priority':'Mark as priority'}" style="background:transparent;border:none;cursor:pointer;padding:0;line-height:1;vertical-align:middle"><i class="ti ti-pin${pinned?'':'-off'} pin-icon" style="${pinned?'':'color:var(--text3);opacity:0.5'}"></i></button> ${c}</span>
+      <span class="client-name" style="cursor:grab"><i class="ti ti-grip-vertical" style="font-size:13px;color:var(--text3);margin-right:2px"></i><button onclick="event.stopPropagation();toggleClientPriority('${c}')" title="${pinned?'Remove from priority':'Mark as priority'}" style="background:transparent;border:none;cursor:pointer;padding:0;line-height:1;vertical-align:middle"><i class="ti ti-pin${pinned?'':'-off'} pin-icon" style="${pinned?'':'color:var(--text3);opacity:0.5'}"></i></button> ${c}${hasDelivery?`<span class="delivery-badges">${deliveryDays.slice().sort((a,b)=>a-b).map(i=>`<span class="delivery-badge">${DAYS[i][0]}</span>`).join('')}</span>`:''}</span>
       <div style="display:flex;align-items:center;gap:7px;flex-shrink:0">
         ${cLink
           ? `<a href="${cLink}" target="_blank" title="Open Sales Timeline" style="color:var(--green);font-size:15px;text-decoration:none;line-height:1"><i class="ti ti-file-text"></i></a>`
@@ -534,6 +557,7 @@ function makeClientCard(c,pinned){
       <button class="cvt ${view==='tasks'?'active':''}" onclick="setCardView('${c}','tasks')">Tasks</button>
       <button class="cvt ${view==='medium'?'active':''}" onclick="setCardView('${c}','medium')">Medium term${hasMedium?'<span class="cvt-dot"></span>':''}</button>
       <button class="cvt ${view==='long'?'active':''}" onclick="setCardView('${c}','long')">Long term${hasLong?'<span class="cvt-dot"></span>':''}</button>
+      <button class="cvt ${view==='delivery'?'active':''}" onclick="setCardView('${c}','delivery')">Delivery days${hasDelivery?'<span class="cvt-dot"></span>':''}</button>
     </div>
     ${bodyHTML}`;
   // drag events
@@ -589,6 +613,14 @@ function makeClientCard(c,pinned){
 }
 
 function setCardView(c,v){cardViews[c]=v;renderClients();}
+function toggleDeliveryDay(c,i){
+  if(!state.clients[c])return;
+  if(!state.clients[c].deliveryDays)state.clients[c].deliveryDays=[];
+  const arr=state.clients[c].deliveryDays;
+  const idx=arr.indexOf(i);
+  if(idx>-1)arr.splice(idx,1);else arr.push(i);
+  save();renderClients();
+}
 function saveTermNote(c,type,val){if(state.clients[c])state.clients[c][type]=val;save();}
 
 function ensureClientOrder(){
@@ -720,7 +752,7 @@ function toggleClientPriority(c){
 function confirmAddClient(){
   const name=document.getElementById('modal-client-name').value.trim();if(!name)return;
   const isPriority=document.getElementById('modal-client-priority').value==='priority';
-  state.clients[name]={tasks:[],priority:isPriority,medium:'',long:'',mediumTasks:[],longTasks:[],link:'',dormant:false};if(!state.clientOrder)state.clientOrder=[];state.clientOrder.push(name);
+  state.clients[name]={tasks:[],priority:isPriority,medium:'',long:'',mediumTasks:[],longTasks:[],link:'',dormant:false,deliveryDays:[]};if(!state.clientOrder)state.clientOrder=[];state.clientOrder.push(name);
   document.getElementById('modal-client-name').value='';
   closeModal('modal-client');save();renderClients();
 }
@@ -1018,6 +1050,7 @@ function importData(e){
         if(!state.clients[c].longTasks)state.clients[c].longTasks=[];
         if(!state.clients[c].link)state.clients[c].link='';
         if(state.clients[c].dormant===undefined)state.clients[c].dormant=false;
+        if(!state.clients[c].deliveryDays)state.clients[c].deliveryDays=[];
       });
       if(!state.clientOrder) state.clientOrder = [];
       Object.keys(state.clients).forEach(c=>{ if(!state.clientOrder.includes(c)) state.clientOrder.push(c); });
