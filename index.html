@@ -938,26 +938,38 @@ function importData(e){
       if(!parsed.data)throw new Error('Invalid format');
       state=parsed.data;
       nextId=parsed.nextId||500;
-      save();
-      // ensure all fields exist
-      if(state.clients)Object.keys(state.clients).forEach(c=>{
+      // ensure all fields exist (defensive — handles backups from older versions)
+      if(!state.clients) state.clients = {};
+      Object.keys(state.clients).forEach(c=>{
+        if(!state.clients[c].tasks)state.clients[c].tasks=[];
+        if(state.clients[c].priority===undefined)state.clients[c].priority=false;
         if(!state.clients[c].medium)state.clients[c].medium='';
         if(!state.clients[c].long)state.clients[c].long='';
         if(!state.clients[c].mediumTasks)state.clients[c].mediumTasks=[];
         if(!state.clients[c].longTasks)state.clients[c].longTasks=[];
         if(!state.clients[c].link)state.clients[c].link='';
+        if(state.clients[c].dormant===undefined)state.clients[c].dormant=false;
       });
+      if(!state.clientOrder) state.clientOrder = [];
+      Object.keys(state.clients).forEach(c=>{ if(!state.clientOrder.includes(c)) state.clientOrder.push(c); });
+      state.clientOrder = state.clientOrder.filter(c=>state.clients[c]);
       if(!state.strategy)state.strategy=[];
       if(!state.personal)state.personal=[];
       if(!state.socials)state.socials=[];
       if(!state.weeklyPlan)state.weeklyPlan='';
-      if(state.leads)state.leads.forEach(l=>{if(!l.notes)l.notes='';if(!l.link)l.link='';if(!l.tasks)l.tasks=[];});
+      if(!state.leads)state.leads=[];
+      state.leads.forEach(l=>{if(!l.notes)l.notes='';if(!l.link)l.link='';if(!l.tasks)l.tasks=[];});
+      save();
       buildDayTabs();
       renderClients();
       updateBadges();
       showToast('Data imported successfully ✓');
-    }catch(err){showToast('Import failed — invalid file');}
+    }catch(err){
+      console.error('Import error:', err);
+      showToast('Import failed — invalid file');
+    }
   };
+  reader.onerror=()=>showToast('Could not read file');
   reader.readAsText(file);
   e.target.value='';
 }
