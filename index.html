@@ -141,6 +141,11 @@ body{font-family:var(--font);background:#eaf2e4;color:var(--text);min-height:100
 
 /* socials / strategy / personal task rows */
 .simple-task-row{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--rad);margin-bottom:6px;box-shadow:var(--shadow)}
+.general-tasks-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--radl);padding:8px 10px;margin-bottom:6px;min-height:44px;box-shadow:var(--shadow)}
+.general-add-area{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.general-add-area form{display:flex;gap:6px;align-items:center;width:100%}
+.general-inp{font-size:13px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:var(--font);outline:none;width:300px}
+.general-inp:focus{border-color:var(--border2)}
 .simple-task-row:hover .del-btn{opacity:1}
 .simple-task-row .task-label{font-size:13px}
 
@@ -249,7 +254,18 @@ body{font-family:var(--font);background:#eaf2e4;color:var(--text);min-height:100
       <div class="stat"><div class="stat-num" id="s-tasks">0</div><div class="stat-label">tasks done</div></div>
       <div class="stat"><div class="stat-num" id="s-left">0</div><div class="stat-label">remaining</div></div>
     </div>
-    <div class="section-label">Priority clients</div>
+    <div class="section-label">General tasks</div>
+    <div class="general-tasks-box" id="general-tasks-list"></div>
+    <div class="general-add-area" id="general-add-area">
+      <button class="add-trigger" id="general-add-btn" onclick="openGeneralInput()"><i class="ti ti-plus" style="font-size:14px"></i> add task</button>
+      <div id="general-add-form" style="display:none;gap:6px;align-items:center">
+        <input id="general-inp" class="general-inp" placeholder="Task name..." onkeydown="handleGeneralKey(event)">
+        <button class="btn-add" onclick="submitGeneralTask()">Add</button>
+        <button class="btn-cancel" onclick="closeGeneralInput()">Cancel</button>
+      </div>
+    </div>
+
+    <div class="section-label" style="margin-top:10px">Priority clients</div>
     <div class="client-grid-col" id="grid-priority" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px"></div>
     <div class="section-label">All clients</div>
     <div class="client-grid-col" id="grid-rest" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin-bottom:14px"></div>
@@ -413,6 +429,7 @@ if(!state.strategy)state.strategy=[];
 if(!state.personal)state.personal=[];
 if(!state.socials)state.socials=[];
 if(!state.weeklyPlan)state.weeklyPlan='';
+if(!state.generalTasks)state.generalTasks=[];
 // ensure leads have notes
 if(state.leads)state.leads.forEach(l=>{if(!l.notes)l.notes='';if(!l.link)l.link='';if(!l.tasks)l.tasks=[];});
 // ensure clients have medium/long
@@ -447,7 +464,7 @@ function showTab(t){
     document.getElementById('tab-'+x).style.display=x===t?'':'none';
     document.getElementById('tab-btn-'+x).classList.toggle('active',x===t);
   });
-  if(t==='clients'){buildDayTabs();renderClients();}
+  if(t==='clients'){buildDayTabs();renderClients();renderGeneralTasks();}
   if(t==='leads')renderLeads();
   if(t==='socials'){buildSocialsDayTabs();renderSocials();document.getElementById('socials-weekly-plan').value=state.weeklyPlan||'';}
   if(t==='strategy')renderStrategy();
@@ -464,6 +481,49 @@ function buildSocialsDayTabs(){
   const el=document.getElementById('socials-day-tabs');if(!el)return;el.innerHTML='';
   DAYS.forEach((d,i)=>{const b=document.createElement('button');b.className='day-chip'+(i===socialsDay?' sel':'');b.textContent=d+(i===todayIdx?' ✦':'');b.onclick=()=>{socialsDay=i;buildSocialsDayTabs();renderSocials();updateBadges();};el.appendChild(b);});
 }
+
+// --- GENERAL TASKS ---
+function renderGeneralTasks(){
+  const list = document.getElementById('general-tasks-list');
+  if(!list) return;
+  const tasks = state.generalTasks || [];
+  list.innerHTML = '';
+  if(!tasks.length){
+    list.innerHTML = '<div class="no-tasks" style="padding:4px 2px">No general tasks yet</div>';
+  } else {
+    tasks.forEach(t => {
+      const div = document.createElement('div');
+      div.className = 'task-row';
+      div.style.padding = '5px 2px';
+      div.innerHTML = `<button class="check-btn ${t.done?'checked':''}" onclick="toggleGeneralTask(${t.id})"></button><span class="task-label ${t.done?'done-text':''}" style="font-size:13px">${t.text}</span><button class="del-btn" onclick="delGeneralTask(${t.id})"><i class="ti ti-x"></i></button>`;
+      div.querySelector('.del-btn').style.opacity = '0';
+      div.onmouseenter = () => div.querySelector('.del-btn').style.opacity = '1';
+      div.onmouseleave = () => div.querySelector('.del-btn').style.opacity = '0';
+      list.appendChild(div);
+    });
+  }
+}
+function openGeneralInput(){
+  document.getElementById('general-add-btn').style.display = 'none';
+  document.getElementById('general-add-form').style.display = 'flex';
+  setTimeout(() => document.getElementById('general-inp').focus(), 10);
+}
+function closeGeneralInput(){
+  document.getElementById('general-add-btn').style.display = '';
+  document.getElementById('general-add-form').style.display = 'none';
+  document.getElementById('general-inp').value = '';
+}
+function submitGeneralTask(){
+  const inp = document.getElementById('general-inp');
+  const text = inp.value.trim(); if(!text) return;
+  if(!state.generalTasks) state.generalTasks = [];
+  state.generalTasks.push({id: nextId++, text, done: false});
+  inp.value = ''; save(); renderGeneralTasks();
+  closeGeneralInput();
+}
+function handleGeneralKey(e){ if(e.key==='Enter') submitGeneralTask(); if(e.key==='Escape') closeGeneralInput(); }
+function toggleGeneralTask(id){ const t=(state.generalTasks||[]).find(t=>t.id===id); if(t){t.done=!t.done;save();renderGeneralTasks();} }
+function delGeneralTask(id){ state.generalTasks=(state.generalTasks||[]).filter(t=>t.id!==id); save(); renderGeneralTasks(); }
 
 // --- CLIENTS ---
 function taskVisible(t,dayIdx){
@@ -1027,6 +1087,7 @@ save();
 
 buildDayTabs();
 renderClients();
+renderGeneralTasks();
 updateBadges();
 
 // --- DAILY EXPORT REMINDER ---
@@ -1088,12 +1149,14 @@ function importData(e){
       if(!state.personal)state.personal=[];
       if(!state.socials)state.socials=[];
       if(!state.weeklyPlan)state.weeklyPlan='';
+      if(!state.generalTasks)state.generalTasks=[];
       if(!state.leads)state.leads=[];
       state.leads.forEach(l=>{if(!l.notes)l.notes='';if(!l.link)l.link='';if(!l.tasks)l.tasks=[];});
       Object.keys(state.clients).forEach(c => syncOrderReminders(c));
       save();
       buildDayTabs();
       renderClients();
+      renderGeneralTasks();
       updateBadges();
       showToast('Data imported successfully ✓');
     }catch(err){
