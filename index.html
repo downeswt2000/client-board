@@ -225,6 +225,7 @@ body{font-family:var(--font);background:#eaf2e4;color:var(--text);min-height:100
 <div class="app">
   <div class="top-bar">
     <div class="logo"><span>🌿</span> My board</div>
+    <span id="last-saved" style="font-size:11px;color:var(--text3)"></span>
     <span class="date-str" id="date-str"></span>
   </div>
 
@@ -416,10 +417,52 @@ function defaultState(){
 }
 
 function loadState(){
-  try{const r=localStorage.getItem(STORAGE_KEY);if(r){const s=JSON.parse(r);if(s.data&&s.data.clients&&Object.keys(s.data.clients).length>0){nextId=s.nextId||500;return s.data;}}}catch(e){}
+  // 1. Try main localStorage key
+  try{
+    const r=localStorage.getItem(STORAGE_KEY);
+    if(r){
+      const s=JSON.parse(r);
+      if(s&&s.data&&s.data.clients&&Object.keys(s.data.clients).length>0){
+        nextId=s.nextId||500;
+        return s.data;
+      }
+    }
+  }catch(e){}
+  // 2. Try rolling daily backups
+  try{
+    const keys=Object.keys(localStorage).filter(k=>k.startsWith(STORAGE_KEY+'_backup_'));
+    keys.sort().reverse();
+    for(const k of keys){
+      const r=localStorage.getItem(k);
+      if(r){
+        const s=JSON.parse(r);
+        if(s&&s.data&&s.data.clients&&Object.keys(s.data.clients).length>0){
+          console.log('Loaded from rolling backup:',k);
+          nextId=s.nextId||500;
+          return s.data;
+        }
+      }
+    }
+  }catch(e){}
+  // 3. Fall back to baked-in seed (never overwrites existing data)
   return null;
 }
-function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify({data:state,nextId}));}catch(e){}}
+function save(){
+  try{
+    const payload=JSON.stringify({data:state,nextId});
+    localStorage.setItem(STORAGE_KEY,payload);
+    // Rolling daily backup — keeps last 3 days automatically
+    const today=new Date().toISOString().slice(0,10);
+    const backupKey=STORAGE_KEY+'_backup_'+today;
+    localStorage.setItem(backupKey,payload);
+    // Clean up backups older than 3 days
+    const keys=Object.keys(localStorage).filter(k=>k.startsWith(STORAGE_KEY+'_backup_'));
+    keys.sort().reverse().slice(3).forEach(k=>localStorage.removeItem(k));
+    // Update last-saved indicator
+    const el=document.getElementById('last-saved');
+    if(el)el.textContent='Saved '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){}
+}
 let state=loadState();
 if(!state.strategy)state.strategy=[];
 if(!state.personal)state.personal=[];
@@ -1088,9 +1131,28 @@ updateBadges();
 function checkExportReminder(){
   const today = new Date().toDateString();
   const lastShown = localStorage.getItem('export_reminder_last_shown');
+  const lastExport = localStorage.getItem('last_export_date');
+  // Show if not shown today AND no export in last 2 days
+  const twoDaysAgo = new Date(Date.now() - 2*24*60*60*1000).toDateString();
   if(lastShown !== today){
     document.getElementById('modal-export-reminder').classList.add('open');
   }
+}
+function recoverFromBackup(){
+  // Try to recover from most recent rolling backup if main key is empty
+  const keys=Object.keys(localStorage).filter(k=>k.startsWith(STORAGE_KEY+'_backup_'));
+  if(!keys.length) return null;
+  keys.sort().reverse();
+  for(const k of keys){
+    try{
+      const s=JSON.parse(localStorage.getItem(k));
+      if(s&&s.data&&s.data.clients&&Object.keys(s.data.clients).length>0){
+        console.log('Recovered from backup key:',k);
+        return s;
+      }
+    }catch(e){}
+  }
+  return null;
 }
 function dismissExportReminder(){
   localStorage.setItem('export_reminder_last_shown', new Date().toDateString());
@@ -1105,6 +1167,7 @@ function showToast(msg){
   setTimeout(()=>t.classList.remove('show'),2500);
 }
 function exportData(){
+  localStorage.setItem('last_export_date', new Date().toDateString());
   const data=JSON.stringify({data:state,nextId},null,2);
   const blob=new Blob([data],{type:'application/json'});
   const url=URL.createObjectURL(blob);
