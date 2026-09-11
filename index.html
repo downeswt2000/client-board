@@ -737,9 +737,7 @@ function renderClients(){
     const p=getProgress(c);td+=p.done;tl+=(p.total-p.done);
     if(p.total>0&&p.done===p.total)cd++;
   });
-  document.getElementById('s-done').textContent=cd;
-  document.getElementById('s-tasks').textContent=td;
-  document.getElementById('s-left').textContent=tl;
+  
 
   function passes(c){
     const p=getProgress(c);
