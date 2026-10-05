@@ -293,6 +293,16 @@ body{font-family:var(--font);background:#eaf2e4;color:var(--text);min-height:100
       <h3>Weekly plan</h3>
       <textarea id="socials-weekly-plan" placeholder="Plan your week's content here — themes, ideas, campaigns..." oninput="saveWeeklyPlan()"></textarea>
     </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div class="socials-plan">
+        <h3>📸 Instagram</h3>
+        <textarea id="socials-instagram-notes" placeholder="Instagram notes — content ideas, captions, hashtags..." oninput="saveInstagramNotes()"></textarea>
+      </div>
+      <div class="socials-plan">
+        <h3>💼 LinkedIn</h3>
+        <textarea id="socials-linkedin-notes" placeholder="LinkedIn notes — post ideas, articles, updates..." oninput="saveLinkedinNotes()"></textarea>
+      </div>
+    </div>
     <div class="toolbar"><button class="action-btn" onclick="resetSocials()">New day ↺</button></div>
     <div class="day-row"><span>Day:</span><div id="socials-day-tabs"></div></div>
     <div class="section-label">Today's tasks</div>
@@ -468,7 +478,7 @@ if(!state.strategy)state.strategy=[];
 if(!state.personal)state.personal=[];
 if(!state.socials)state.socials=[];
 if(!state.weeklyPlan)state.weeklyPlan='';
-if(!state.generalTasks)state.generalTasks=[];
+if(!state.generalTasks)state.generalTasks=[];if(!state.instagramNotes)state.instagramNotes="";if(!state.linkedinNotes)state.linkedinNotes="";
 // ensure leads have notes
 if(state.leads)state.leads.forEach(l=>{if(!l.notes)l.notes='';if(!l.link)l.link='';if(!l.tasks)l.tasks=[];});
 // ensure clients have medium/long
@@ -505,7 +515,12 @@ function showTab(t){
   });
   if(t==='clients'){buildDayTabs();renderClients();renderGeneralTasks();}
   if(t==='leads')renderLeads();
-  if(t==='socials'){buildSocialsDayTabs();renderSocials();document.getElementById('socials-weekly-plan').value=state.weeklyPlan||'';}
+  if(t==='socials'){
+    buildSocialsDayTabs();renderSocials();
+    document.getElementById('socials-weekly-plan').value=state.weeklyPlan||'';
+    document.getElementById('socials-instagram-notes').value=state.instagramNotes||'';
+    document.getElementById('socials-linkedin-notes').value=state.linkedinNotes||'';
+  }
   if(t==='strategy')renderStrategy();
   if(t==='personal')renderPersonal();
   updateBadges();
@@ -555,7 +570,7 @@ function closeGeneralInput(){
 function submitGeneralTask(){
   const inp = document.getElementById('general-inp');
   const text = inp.value.trim(); if(!text) return;
-  if(!state.generalTasks) state.generalTasks = [];
+  if(!state.generalTasks)state.generalTasks=[];if(!state.instagramNotes)state.instagramNotes="";if(!state.linkedinNotes)state.linkedinNotes="";
   state.generalTasks.push({id: nextId++, text, done: false});
   inp.value = ''; save(); renderGeneralTasks();
   closeGeneralInput();
@@ -1014,6 +1029,8 @@ function confirmAddLead(){
 
 // --- SOCIALS ---
 function saveWeeklyPlan(){state.weeklyPlan=document.getElementById('socials-weekly-plan').value;save();}
+function saveInstagramNotes(){state.instagramNotes=document.getElementById('socials-instagram-notes').value;save();}
+function saveLinkedinNotes(){state.linkedinNotes=document.getElementById('socials-linkedin-notes').value;save();}
 function setSocialsMode(m){
   socialsMode=m;
   ['one-off','daily','day-specific'].forEach(x=>document.getElementById('sr-'+x.replace(/-/g,'')).classList.toggle('on',x===m));
@@ -1206,7 +1223,7 @@ function importData(e){
       if(!state.personal)state.personal=[];
       if(!state.socials)state.socials=[];
       if(!state.weeklyPlan)state.weeklyPlan='';
-      if(!state.generalTasks)state.generalTasks=[];
+      if(!state.generalTasks)state.generalTasks=[];if(!state.instagramNotes)state.instagramNotes="";if(!state.linkedinNotes)state.linkedinNotes="";
       if(!state.leads)state.leads=[];
       state.leads.forEach(l=>{if(!l.notes)l.notes='';if(!l.link)l.link='';if(!l.tasks)l.tasks=[];});
       Object.keys(state.clients).forEach(c => syncOrderReminders(c));
