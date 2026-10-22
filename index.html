@@ -260,10 +260,18 @@ body{font-family:var(--font);background:#eaf2e4;color:var(--text);min-height:100
     <div class="general-tasks-box" id="general-tasks-list"></div>
     <div class="general-add-area" id="general-add-area">
       <button class="add-trigger" id="general-add-btn" onclick="openGeneralInput()"><i class="ti ti-plus" style="font-size:14px"></i> add task</button>
-      <div id="general-add-form" style="display:none;gap:6px;align-items:center">
+      <div id="general-add-form" style="display:none;flex-direction:column;gap:6px;max-width:500px">
         <input id="general-inp" class="general-inp" placeholder="Task name..." onkeydown="handleGeneralKey(event)">
-        <button class="btn-add" onclick="submitGeneralTask()">Add</button>
-        <button class="btn-cancel" onclick="closeGeneralInput()">Cancel</button>
+        <div class="recur-row">
+          <button class="rtoggle on" id="gr-oneoff" onclick="setGeneralMode('one-off')">one-off</button>
+          <button class="rtoggle" id="gr-daily" onclick="setGeneralMode('daily')">every day</button>
+          <button class="rtoggle" id="gr-day" onclick="setGeneralMode('day-specific')">specific days</button>
+        </div>
+        <div class="day-chips-row" id="general-day-sel" style="display:none"></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-add" onclick="submitGeneralTask()">Add</button>
+          <button class="btn-cancel" onclick="closeGeneralInput()">Cancel</button>
+        </div>
       </div>
     </div>
 
@@ -486,6 +494,8 @@ if(!state.personal)state.personal=[];
 if(!state.socials)state.socials=[];
 if(!state.weeklyPlan)state.weeklyPlan='';
 if(!state.generalTasks)state.generalTasks=[];if(!state.instagramNotes)state.instagramNotes="";if(!state.linkedinNotes)state.linkedinNotes="";
+// migrate old general tasks that have no type
+state.generalTasks.forEach(t=>{if(!t.type)t.type='one-off';if(!t.days)t.days=[];});
 // ensure leads have notes
 if(state.leads)state.leads.forEach(l=>{if(!l.notes)l.notes='';if(!l.link)l.link='';if(!l.tasks)l.tasks=[];});
 // ensure clients have medium/long
@@ -536,7 +546,7 @@ function showTab(t){
 // --- DAY TABS ---
 function buildDayTabs(){
   const el=document.getElementById('day-tabs');el.innerHTML='';
-  DAYS.forEach((d,i)=>{const b=document.createElement('button');b.className='day-chip'+(i===currentDay?' sel':'');b.textContent=d+(i===todayIdx?' ✦':'');b.onclick=()=>{currentDay=i;buildDayTabs();renderClients();updateBadges();};el.appendChild(b);});
+  DAYS.forEach((d,i)=>{const b=document.createElement('button');b.className='day-chip'+(i===currentDay?' sel':'');b.textContent=d+(i===todayIdx?' ✦':'');b.onclick=()=>{currentDay=i;buildDayTabs();renderClients();renderGeneralTasks();updateBadges();};el.appendChild(b);});
 }
 function buildSocialsDayTabs(){
   const el=document.getElementById('socials-day-tabs');if(!el)return;el.innerHTML='';
@@ -544,19 +554,24 @@ function buildSocialsDayTabs(){
 }
 
 // --- GENERAL TASKS ---
+let generalMode = 'one-off';
+let generalSelDays = [];
+
 function renderGeneralTasks(){
   const list = document.getElementById('general-tasks-list');
   if(!list) return;
-  const tasks = state.generalTasks || [];
+  const tasks = (state.generalTasks||[]).filter(t=>taskVisible(t,currentDay));
   list.innerHTML = '';
   if(!tasks.length){
-    list.innerHTML = '<div class="no-tasks" style="padding:4px 2px">No general tasks yet</div>';
+    list.innerHTML = '<div class="no-tasks" style="padding:4px 2px">No general tasks for this day</div>';
   } else {
     tasks.forEach(t => {
       const div = document.createElement('div');
       div.className = 'task-row';
       div.style.padding = '5px 2px';
-      div.innerHTML = `<button class="check-btn ${t.done?'checked':''}" onclick="toggleGeneralTask(${t.id})"></button><span class="task-label ${t.done?'done-text':''}" style="font-size:13px">${t.text}</span><button class="del-btn" onclick="delGeneralTask(${t.id})"><i class="ti ti-x"></i></button>`;
+      const dot = t.type==='daily'?'<span class="dot dot-daily"></span>':t.type==='day-specific'?'<span class="dot dot-day"></span>':'';
+      const badge = t.type==='day-specific'?`<span class="day-badge">${t.days.map(d=>DAYS[d]).join(',')}</span>`:'';
+      div.innerHTML = `<button class="check-btn ${t.done?'checked':''}" onclick="toggleGeneralTask(${t.id})"></button>${dot}<span class="task-label ${t.done?'done-text':''}" style="font-size:13px">${t.text}</span>${badge}<button class="del-btn" onclick="delGeneralTask(${t.id})"><i class="ti ti-x"></i></button>`;
       div.querySelector('.del-btn').style.opacity = '0';
       div.onmouseenter = () => div.querySelector('.del-btn').style.opacity = '1';
       div.onmouseleave = () => div.querySelector('.del-btn').style.opacity = '0';
@@ -573,14 +588,41 @@ function closeGeneralInput(){
   document.getElementById('general-add-btn').style.display = '';
   document.getElementById('general-add-form').style.display = 'none';
   document.getElementById('general-inp').value = '';
+  generalMode = 'one-off';
+  generalSelDays = [];
+  ['oneoff','daily','day'].forEach(x=>document.getElementById('gr-'+x)?.classList.remove('on'));
+  document.getElementById('gr-oneoff')?.classList.add('on');
+  const sel = document.getElementById('general-day-sel');
+  if(sel) sel.style.display = 'none';
+}
+function setGeneralMode(m){
+  generalMode = m;
+  ['one-off','daily','day-specific'].forEach(x=>{
+    const id = 'gr-'+x.replace(/-/g,'').replace('specific','');
+    const el = document.getElementById(id === 'gr-dayspecific' ? 'gr-day' : id);
+    if(el) el.classList.toggle('on', x===m);
+  });
+  const sel = document.getElementById('general-day-sel');
+  if(m==='day-specific'){ sel.style.display='flex'; buildGeneralDayChips(); }
+  else sel.style.display='none';
+}
+function buildGeneralDayChips(){
+  const el = document.getElementById('general-day-sel'); el.innerHTML='';
+  DAYS.forEach((d,i)=>{
+    const b=document.createElement('button');
+    b.className='day-chip'+(generalSelDays.includes(i)?' sel':'');
+    b.textContent=d;
+    b.onclick=()=>{const idx=generalSelDays.indexOf(i);if(idx>-1)generalSelDays.splice(idx,1);else generalSelDays.push(i);buildGeneralDayChips();};
+    el.appendChild(b);
+  });
 }
 function submitGeneralTask(){
   const inp = document.getElementById('general-inp');
   const text = inp.value.trim(); if(!text) return;
-  if(!state.generalTasks)state.generalTasks=[];if(!state.instagramNotes)state.instagramNotes="";if(!state.linkedinNotes)state.linkedinNotes="";
-  state.generalTasks.push({id: nextId++, text, done: false});
-  inp.value = ''; save(); renderGeneralTasks();
-  closeGeneralInput();
+  if(!state.generalTasks)state.generalTasks=[];
+  const days = generalMode==='day-specific'?generalSelDays.slice():[];
+  state.generalTasks.push({id:nextId++, text, done:false, type:generalMode, days});
+  inp.value=''; save(); renderGeneralTasks(); closeGeneralInput();
 }
 function handleGeneralKey(e){ if(e.key==='Enter') submitGeneralTask(); if(e.key==='Escape') closeGeneralInput(); }
 function toggleGeneralTask(id){ const t=(state.generalTasks||[]).find(t=>t.id===id); if(t){t.done=!t.done;save();renderGeneralTasks();} }
